@@ -22,7 +22,13 @@ extern "C" {
 // Defines
 //
 
+/** Callsign characters in one address field (space padded on the air). */
 #define UNI_AX25_CALLSIGN_SIZE      (6U)
+
+/** Size of one encoded address field: callsign and SSID byte. */
+#define UNI_AX25_ADDRESS_SIZE       (UNI_AX25_CALLSIGN_SIZE + 1U)
+
+/** Destination, source and up to 8 repeaters. */
 #define UNI_AX25_PEERS_MAXCOUNT     (10U)
 
 
@@ -70,9 +76,10 @@ typedef enum {
 
 typedef struct {
     /**
-     * Peer callsign
+     * Peer callsign without the space padding, NUL-terminated (the last byte is always NUL after
+     * uni_ax25_decode(); encoding stops at the first NUL)
      */
-    char callsign[UNI_AX25_CALLSIGN_SIZE];
+    char callsign[UNI_AX25_CALLSIGN_SIZE + 1U];
 
     /**
      * Peer SSID
@@ -111,12 +118,40 @@ typedef struct {
 // Functions
 //
 
+/**
+ * Decode the AX.25 address field followed by one control byte and one PID byte (UI / I frame
+ * header with modulo-8 control field).
+ *
+ * The address field must hold 2 to UNI_AX25_PEERS_MAXCOUNT addresses, and only the last one may
+ * have the extension bit set. @p ax25_header is cleared first; unused peers stay empty. Its
+ * contents are unspecified on failure.
+ *
+ * @return header size in bytes (offset of the information field), or SIZE_MAX when the address
+ *         field is malformed or @p data is too short
+ */
 size_t uni_ax25_decode(const uint8_t *data, size_t data_len, uni_ax25_data_t *ax25_header);
 
+/**
+ * Encode the address field, control byte and PID byte.
+ *
+ * @return header size in bytes, or SIZE_MAX when an argument is invalid or the header does not fit
+ */
 size_t uni_ax25_encode(const uni_ax25_data_t *ax25_header, uint8_t *data, size_t data_len);
 
+/**
+ * Encode the address field only: destination, source and the repeaters up to the first one with
+ * an empty callsign. The extension bit is set on the last encoded address only.
+ *
+ * @return address field size in bytes, or SIZE_MAX when an argument is invalid or the whole address
+ *         field does not fit (a truncated address field is never produced)
+ */
 size_t uni_ax25_encode_address(const uni_ax25_data_t *ax25_header, uint8_t *data, size_t data_len);
 
+/**
+ * Find @p callsign (NUL-terminated, at most UNI_AX25_CALLSIGN_SIZE characters, SSID ignored).
+ *
+ * @return peer index, or SIZE_MAX when not found or @p callsign is empty or too long
+ */
 size_t uni_ax25_contains_callsign(const uni_ax25_data_t *ax25_header, const char* callsign);
 
 #ifdef __cplusplus
