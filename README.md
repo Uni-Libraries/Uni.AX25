@@ -11,8 +11,13 @@ AX.25 header (address field, control, PID) encoding and decoding in plain C.
   instead of a truncated address field when the buffer is too small.
 - `uni_ax25_contains_callsign()` compares NUL-terminated callsigns (SSID ignored).
 
-S and U frames (no PID) and modulo-128 control fields are not modelled. The FCS and HDLC bit stuffing
-are left to the caller.
+- `uni_ax25_header_valid()` checks a frame header without keeping the decoded fields.
+- `uni_ax25_hdlc.h` holds the link-layer helpers: the frame check sequence (`uni_ax25_fcs()`,
+  `uni_ax25_fcs_valid()`, CRC-16/X-25), bit stuffing and destuffing one bit at a time
+  (`uni_ax25_hdlc_stuff_bit()`, `uni_ax25_hdlc_destuff_bit()`) and the flag value. Finding flags in a
+  bit stream stays with the caller.
+
+S and U frames (no PID) and modulo-128 control fields are not modelled.
 
 ## Build
 

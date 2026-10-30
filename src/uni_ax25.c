@@ -104,6 +104,12 @@ size_t uni_ax25_decode(const uint8_t *data, size_t data_len, uni_ax25_data_t *ax
 }
 
 
+bool uni_ax25_header_valid(const uint8_t *data, size_t data_len) {
+    uni_ax25_data_t header;
+    return uni_ax25_decode(data, data_len, &header) != SIZE_MAX;
+}
+
+
 size_t uni_ax25_encode(const uni_ax25_data_t *ax25_header, uint8_t *data, size_t data_len) {
     size_t off = uni_ax25_encode_address(ax25_header, data, data_len);
     if (off == SIZE_MAX || data_len - off < 2U) {

@@ -17,6 +17,7 @@
 
 // Uni.AX25
 #include "uni_ax25.h"
+#include "uni_ax25_hdlc.h"
 
 
 
@@ -332,5 +333,90 @@ TEST_CASE("ax25_fuzz", "[ax25][fuzz]") {
         }
         REQUIRE(again.control == ax25.control);
         REQUIRE(again.pid == ax25.pid);
+    }
+}
+
+TEST_CASE("ax25_header_valid", "[ax25]") {
+    uni_ax25_data_t header{};
+    std::strcpy(header.peers[APP_AX25_PEER_DST].callsign, "DST");
+    std::strcpy(header.peers[APP_AX25_PEER_SRC].callsign, "SRC");
+    header.control = UNI_AX25_CONTROL_UI;
+    header.pid = UNI_AX25_PID_NO_L3;
+    Bytes frame(32U);
+    const auto size = uni_ax25_encode(&header, frame.data(), frame.size());
+    REQUIRE(size != SIZE_MAX);
+    CHECK(uni_ax25_header_valid(frame.data(), size));
+    CHECK_FALSE(uni_ax25_header_valid(frame.data(), size - 1U));
+
+    // No address carries the extension bit, so control and PID would be read from address octets.
+    const Bytes unterminated(16U, static_cast<uint8_t>('A' << 1U));
+    CHECK_FALSE(uni_ax25_header_valid(unterminated.data(), unterminated.size()));
+}
+
+TEST_CASE("ax25_fcs", "[ax25][hdlc]") {
+    const Bytes check{'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    CHECK(uni_ax25_fcs(check.data(), check.size()) == 0x906EU);
+    CHECK(uni_ax25_fcs(nullptr, 0U) == 0x0000U);
+
+    Bytes with_fcs = check;
+    with_fcs.push_back(0x6EU);
+    with_fcs.push_back(0x90U);
+    CHECK(uni_ax25_fcs_valid(with_fcs.data(), with_fcs.size()));
+    with_fcs[0] ^= 0x01U;
+    CHECK_FALSE(uni_ax25_fcs_valid(with_fcs.data(), with_fcs.size()));
+
+    uint16_t incremental = UNI_AX25_FCS_INITIAL;
+    for (const auto byte : check) {
+        incremental = uni_ax25_fcs_update(incremental, byte);
+    }
+    CHECK(static_cast<uint16_t>(incremental ^ UNI_AX25_FCS_XOR_OUT) == 0x906EU);
+}
+
+TEST_CASE("ax25_hdlc_lsb_bit", "[ax25][hdlc]") {
+    CHECK(uni_ax25_hdlc_lsb_bit(UNI_AX25_HDLC_FLAG, 0U) == 0U);
+    CHECK(uni_ax25_hdlc_lsb_bit(UNI_AX25_HDLC_FLAG, 1U) == 1U);
+    CHECK(uni_ax25_hdlc_lsb_bit(UNI_AX25_HDLC_FLAG, 7U) == 0U);
+}
+
+TEST_CASE("ax25_hdlc_stuffing", "[ax25][hdlc]") {
+    SECTION("a zero follows every run of five ones and the input bit is offered again") {
+        uni_ax25_hdlc_stuffing_t state{};
+        const Bytes input{1U, 1U, 1U, 1U, 1U, 1U, 0U};
+        Bytes wire;
+        std::size_t index = 0U;
+        while (index < input.size()) {
+            uint8_t bit = 0U;
+            bool consumed = false;
+            REQUIRE(uni_ax25_hdlc_stuff_bit(&state, input[index], &bit, &consumed));
+            wire.push_back(bit);
+            index += consumed ? 1U : 0U;
+        }
+        CHECK(wire == Bytes{1U, 1U, 1U, 1U, 1U, 0U, 1U, 0U});
+    }
+
+    SECTION("destuffing removes the stuffed zero and rejects six ones") {
+        uni_ax25_hdlc_destuffing_t state{};
+        uint8_t bit = 0U;
+        for (int count = 0; count < 5; ++count) {
+            CHECK(uni_ax25_hdlc_destuff_bit(&state, 1U, &bit) == UNI_AX25_HDLC_DESTUFF_EMIT);
+            CHECK(bit == 1U);
+        }
+        CHECK(uni_ax25_hdlc_destuff_bit(&state, 0U, &bit) == UNI_AX25_HDLC_DESTUFF_SUPPRESS);
+        CHECK(uni_ax25_hdlc_destuff_bit(&state, 0U, &bit) == UNI_AX25_HDLC_DESTUFF_EMIT);
+        CHECK(bit == 0U);
+
+        for (int count = 0; count < 5; ++count) {
+            REQUIRE(uni_ax25_hdlc_destuff_bit(&state, 1U, &bit) == UNI_AX25_HDLC_DESTUFF_EMIT);
+        }
+        CHECK(uni_ax25_hdlc_destuff_bit(&state, 1U, &bit) == UNI_AX25_HDLC_DESTUFF_INVALID);
+    }
+
+    SECTION("bits other than 0 and 1 are rejected") {
+        uni_ax25_hdlc_stuffing_t stuffing{};
+        uint8_t bit = 0U;
+        bool consumed = false;
+        CHECK_FALSE(uni_ax25_hdlc_stuff_bit(&stuffing, 2U, &bit, &consumed));
+        uni_ax25_hdlc_destuffing_t destuffing{};
+        CHECK(uni_ax25_hdlc_destuff_bit(&destuffing, 2U, &bit) == UNI_AX25_HDLC_DESTUFF_INVALID);
     }
 }

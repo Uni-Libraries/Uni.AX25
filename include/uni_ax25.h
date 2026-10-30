@@ -132,6 +132,11 @@ typedef struct {
 size_t uni_ax25_decode(const uint8_t *data, size_t data_len, uni_ax25_data_t *ax25_header);
 
 /**
+ * Check that @p data starts with a well-formed UI / I frame header (see uni_ax25_decode()).
+ */
+bool uni_ax25_header_valid(const uint8_t *data, size_t data_len);
+
+/**
  * Encode the address field, control byte and PID byte.
  *
  * @return header size in bytes, or SIZE_MAX when an argument is invalid or the header does not fit

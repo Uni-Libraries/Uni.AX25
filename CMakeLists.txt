@@ -28,6 +28,7 @@ add_library(uni_ax25::uni_ax25 ALIAS uni_ax25)
 
 target_sources(uni_ax25 PRIVATE
     src/uni_ax25.c
+    src/uni_ax25_hdlc.c
 )
 
 target_include_directories(uni_ax25 PUBLIC
@@ -64,7 +65,7 @@ if(UNI_AX25_INSTALL)
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
     )
-    install(FILES include/uni_ax25.h DESTINATION include)
+    install(FILES include/uni_ax25.h include/uni_ax25_hdlc.h DESTINATION include)
 endif()
 
 
